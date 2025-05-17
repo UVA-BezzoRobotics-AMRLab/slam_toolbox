@@ -327,6 +327,51 @@ bool SlamToolbox::updateMap()
 
   vis_utils::toNavMap(occ_grid, map_.map);
 
+
+  // ─────────────────────────────────────────────────────────────
+  // Enlarge the grid by a factor 'n' (keeping same resolution)
+  // ─────────────────────────────────────────────────────────────
+
+  // 1) Capture old dimensions
+  auto& grid = map_.map;
+  const uint32_t old_w = grid.info.width;
+  const uint32_t old_h = grid.info.height;
+
+  // 2) Choose your scale factor (integer)
+  const double n = 1.5;  // example: make the map 3× larger in X and Y
+
+  // 3) Compute new dimensions
+  const uint32_t new_w = old_w * n;
+  const uint32_t new_h = old_h * n;
+
+  // 4) Shift origin so the old map stays centered
+  const double dx = 0.5 * (new_w - old_w) * grid.info.resolution;
+  const double dy = 0.5 * (new_h - old_h) * grid.info.resolution;
+  grid.info.origin.position.x -= dx;
+  grid.info.origin.position.y -= dy;
+
+  // 5) Build a fresh data array filled with UNKNOWN (-1)
+  std::vector<int8_t> enlarged(new_w * new_h, -1);
+
+  // 6) Copy old cells into the center of the new array
+  const uint32_t x_off = (new_w - old_w) / 2;
+  const uint32_t y_off = (new_h - old_h) / 2;
+  for (uint32_t y = 0; y < old_h; ++y) {
+    for (uint32_t x = 0; x < old_w; ++x) {
+      const uint32_t old_idx =  y * old_w + x;
+      const uint32_t new_idx = (y + y_off) * new_w + (x + x_off);
+      enlarged[new_idx] = grid.data[old_idx];
+    }
+  }
+
+  // 7) Swap in the enlarged map and update metadata
+  grid.data.swap(enlarged);
+  grid.info.width  = new_w;
+  grid.info.height = new_h;
+
+  // ─────────────────────────────────────────────────────────────
+
+
   // publish map as current
   map_.map.header.stamp = ros::Time::now();
   sst_.publish(map_.map);
